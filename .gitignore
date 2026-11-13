@@ -1,0 +1,10 @@
+__pycache__/
+.pytest_cache/
+.DS_Store
+.venv/
+data/raw/*
+data/processed/*
+models/*
+artifacts/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
