@@ -6,6 +6,8 @@ from src.tfidf_engine import TfidfIndex
 from src.similarity_engine import ranked_search, similar_documents
 from src.keyword_extraction import extract_keywords
 from src.topic_modeling import TopicModel
+from src.search_engine import SearchEngine
+from src.clustering import fit_clusters
 
 
 TITLES = ["Deep learning for images", "Natural language models", "Deep neural image networks", "Language classification"]
@@ -31,10 +33,53 @@ def test_search_and_recommendations_are_ranked_and_exclude_self():
     assert results[0][0] in (0, 2) and results[0][1] >= results[1][1]
     recommendations = similar_documents(index, results[0][0], 3)
     assert all(row != results[0][0] for row, _ in recommendations)
+    assert ranked_search(index, "quantum cryptography", 3) == []
 
 
 def test_keywords_and_topics():
     assert extract_keywords("transformer transformer attention neural model", 2)[0][0] == "transformer"
+    assert extract_keywords("the and or", 5) == []
     topic = TopicModel.fit(TITLES, ABSTRACTS, n_topics=2, max_documents=4, max_features=100)
     assert len(topic.topic_summary()) == 2
     assert np.all((topic.assignments >= 0) & (topic.assignments < 2))
+    assignments = topic.assign(TITLES, ABSTRACTS, batch_size=2)
+    assert len(assignments) == len(TITLES)
+
+
+def test_tfidf_persistence_and_search_facade(tmp_path):
+    papers = pd.DataFrame({"paper_id": ["1", "2", "3", "4"],
+                           "title": TITLES, "abstract": ABSTRACTS})
+    index = TfidfIndex.fit(TITLES, ABSTRACTS, max_features=1000)
+    index.save(tmp_path / "tfidf")
+    restored = TfidfIndex.load(tmp_path / "tfidf")
+    engine = SearchEngine(papers, restored)
+    assert engine.search("deep image", 1)[0]["paper_id"] in {"1", "3"}
+
+
+def test_model_configuration_edge_cases():
+    tiny_index = TfidfIndex.fit(["C++"], ["C++ code"], max_features=100)
+    assert tiny_index.matrix.shape[0] == 1
+    assert "c++" in tiny_index.vectorizer.vocabulary_
+    topic = TopicModel.fit(TITLES, ABSTRACTS, n_topics=20, max_documents=0, max_features=100)
+    assert len(topic.topic_summary()) == len(TITLES)
+    try:
+        TfidfIndex.fit([], [], max_features=100)
+    except ValueError as exc:
+        assert "At least one document" in str(exc)
+    else:
+        raise AssertionError("Empty TF-IDF input must fail explicitly.")
+    try:
+        TopicModel.fit(TITLES, ABSTRACTS, n_topics=2, max_features=100).assign(
+            TITLES, ABSTRACTS, batch_size=0
+        )
+    except ValueError as exc:
+        assert "batch_size" in str(exc)
+    else:
+        raise AssertionError("Invalid topic batch size must fail explicitly.")
+
+
+def test_optional_clustering():
+    index = TfidfIndex.fit(TITLES, ABSTRACTS, max_features=1000)
+    model, labels = fit_clusters(index.matrix, n_clusters=2)
+    assert model.n_clusters == 2
+    assert len(labels) == len(TITLES)

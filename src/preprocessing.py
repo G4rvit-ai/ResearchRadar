@@ -6,6 +6,7 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
 
 _TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.-]{1,}")
+TOKEN_PATTERN = r"(?u)(?<!\w)[A-Za-z][A-Za-z0-9+#.-]{1,}(?!\w)"
 _STOPWORDS = set(ENGLISH_STOP_WORDS) - {
     "above", "below", "between", "both", "down", "few", "more", "most",
     "over", "same", "under", "up", "very",

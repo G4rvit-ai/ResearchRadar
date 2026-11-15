@@ -19,14 +19,20 @@ def main():
                         help="0 means all available papers; use 5000 for laptop development.")
     parser.add_argument("--lda-documents", type=int, default=SETTINGS.lda_documents)
     parser.add_argument("--topics", type=int, default=SETTINGS.n_topics)
+    parser.add_argument("--max-features", type=int, default=SETTINGS.max_features)
+    parser.add_argument("--title-weight", type=int, default=int(SETTINGS.title_weight))
+    parser.add_argument("--assign-all-topics", action="store_true",
+                        help="Assign LDA topics to all processed papers in batches.")
     args = parser.parse_args()
-    papers = load_huggingface_dataset(SETTINGS.dataset_name, SETTINGS.split)
-    if args.max_documents:
-        papers = papers.iloc[:args.max_documents].copy()
+    papers = load_huggingface_dataset(SETTINGS.dataset_name, SETTINGS.split,
+                                      max_documents=args.max_documents)
     papers.to_parquet(PROCESSED_DIR / "papers.parquet", index=False)
-    index = TfidfIndex.fit(papers.title, papers.abstract, SETTINGS.max_features, int(SETTINGS.title_weight))
+    index = TfidfIndex.fit(papers.title, papers.abstract, args.max_features, args.title_weight)
     index.save(MODELS_DIR / "tfidf")
     topic_model = TopicModel.fit(papers.title, papers.abstract, args.topics, args.lda_documents)
+    if args.assign_all_topics:
+        topic_model.assignments = topic_model.assign(papers.title.tolist(), papers.abstract.tolist(),
+                                                     SETTINGS.batch_size)
     topic_model.save(MODELS_DIR / "lda")
     (ARTIFACTS_DIR / "metadata.json").write_text(json.dumps({
         "dataset": SETTINGS.dataset_name, "split": SETTINGS.split,

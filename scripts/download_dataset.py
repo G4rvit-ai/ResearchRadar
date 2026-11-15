@@ -1,4 +1,5 @@
 """Inspect and cache the Hugging Face dataset without fitting models."""
+import argparse
 from pathlib import Path
 import sys
 
@@ -9,7 +10,12 @@ from src.dataset_loader import load_huggingface_dataset
 
 
 if __name__ == "__main__":
-    papers = load_huggingface_dataset(SETTINGS.dataset_name, SETTINGS.split)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max-documents", type=int, default=1000,
+                        help="Bounded sample size; use 0 only when intentionally loading the full split.")
+    args = parser.parse_args()
+    papers = load_huggingface_dataset(SETTINGS.dataset_name, SETTINGS.split,
+                                      max_documents=args.max_documents)
     print("Columns: paper_id, title, abstract")
     print(f"Rows after cleaning: {len(papers):,}")
     papers.head(3).to_csv(PROCESSED_DIR / "sample.csv", index=False)

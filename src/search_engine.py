@@ -6,6 +6,8 @@ from .similarity_engine import ranked_search, similar_documents
 
 class SearchEngine:
     def __init__(self, papers: pd.DataFrame, index, topic_model=None):
+        if len(papers) != index.matrix.shape[0]:
+            raise ValueError("Paper table and TF-IDF index must contain the same number of rows.")
         self.papers, self.index, self.topic_model = papers.reset_index(drop=True), index, topic_model
 
     def search(self, query, top_k=10):
@@ -18,6 +20,9 @@ class SearchEngine:
     def recommendations(self, row_index, top_k=5):
         return [self._result(i, self.papers.iloc[i], score)
                 for i, score in similar_documents(self.index, row_index, top_k)]
+
+    def result_for_row(self, row_index, score=0.0):
+        return self._result(row_index, self.papers.iloc[row_index], score)
 
     def _result(self, row_index, paper, score):
         topic_id = None

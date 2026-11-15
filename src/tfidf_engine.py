@@ -5,7 +5,7 @@ import numpy as np
 from scipy.sparse import csr_matrix, save_npz, load_npz
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from .preprocessing import combine_title_abstract
+from .preprocessing import TOKEN_PATTERN, combine_title_abstract
 
 
 class TfidfIndex:
@@ -15,7 +15,14 @@ class TfidfIndex:
     @classmethod
     def fit(cls, titles, abstracts, max_features=100000, title_weight=2):
         documents = [combine_title_abstract(title, abstract, title_weight) for title, abstract in zip(titles, abstracts)]
-        vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=2, max_df=0.98,
+        if not documents:
+            raise ValueError("At least one document is required to fit the TF-IDF index.")
+        document_count = len(documents)
+        vectorizer = TfidfVectorizer(
+            ngram_range=(1, 2),
+            min_df=min(2, document_count),
+            max_df=0.98 if document_count > 2 else 1.0,
+            token_pattern=TOKEN_PATTERN,
                                      max_features=max_features, sublinear_tf=True)
         return cls(vectorizer, vectorizer.fit_transform(documents).tocsr(), title_weight)
 

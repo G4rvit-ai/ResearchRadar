@@ -5,13 +5,23 @@ import pandas as pd
 
 
 def load_huggingface_dataset(dataset_name: str = "CShorten/ML-ArXiv-Papers", split: str = "train",
-                             cache_dir: str | Path | None = None) -> pd.DataFrame:
+                             cache_dir: str | Path | None = None,
+                             max_documents: int = 0) -> pd.DataFrame:
     try:
         from datasets import load_dataset
     except ImportError as exc:
         raise RuntimeError("Install the 'datasets' package before downloading the corpus.") from exc
-    dataset = load_dataset(dataset_name, split=split, cache_dir=cache_dir)
-    frame = dataset.to_pandas()
+    if max_documents > 0:
+        dataset = load_dataset(dataset_name, split=split, cache_dir=cache_dir, streaming=True)
+        rows = []
+        for row in dataset:
+            rows.append(row)
+            if len(rows) >= max_documents:
+                break
+        frame = pd.DataFrame(rows)
+    else:
+        dataset = load_dataset(dataset_name, split=split, cache_dir=cache_dir)
+        frame = dataset.to_pandas()
     return clean_dataframe(frame)
 
 
