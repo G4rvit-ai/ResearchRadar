@@ -7,6 +7,8 @@ import pandas as pd
 def load_huggingface_dataset(dataset_name: str = "CShorten/ML-ArXiv-Papers", split: str = "train",
                              cache_dir: str | Path | None = None,
                              max_documents: int = 0) -> pd.DataFrame:
+    if max_documents < 0:
+        raise ValueError("max_documents must be 0 or a positive integer.")
     try:
         from datasets import load_dataset
     except ImportError as exc:

@@ -33,6 +33,8 @@ def preprocess_text(text: object) -> str:
 
 
 def combine_title_abstract(title: object, abstract: object, title_weight: int = 2) -> str:
+    if isinstance(title_weight, bool) or not isinstance(title_weight, int) or title_weight < 1:
+        raise ValueError("title_weight must be a positive integer.")
     title_text = preprocess_text(title)
     abstract_text = preprocess_text(abstract)
     return " ".join([title_text] * max(1, title_weight) + [abstract_text])

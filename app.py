@@ -1,4 +1,6 @@
 """ResearchRadar Streamlit dashboard."""
+import json
+import hashlib
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -217,6 +219,27 @@ def load_engine():
         return None
     papers = pd.read_parquet(papers_path)
     index = TfidfIndex.load(MODELS_DIR / "tfidf")
+    metadata_path = ARTIFACTS_DIR / "metadata.json"
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        if metadata.get("paper_count") != len(papers):
+            raise RuntimeError(
+                "Processed papers and build metadata contain different row counts. "
+                "Rebuild artifacts with scripts/build_models.py."
+            )
+        if metadata.get("vector_shape") != [index.matrix.shape[0], index.matrix.shape[1]]:
+            raise RuntimeError(
+                "TF-IDF index and build metadata are inconsistent. "
+                "Rebuild artifacts with scripts/build_models.py."
+            )
+        fingerprint = hashlib.sha256()
+        for paper_id, title, abstract in papers[["paper_id", "title", "abstract"]].itertuples(index=False, name=None):
+            fingerprint.update(f"{paper_id}\0{title}\0{abstract}\0".encode("utf-8"))
+        if metadata.get("corpus_fingerprint") and metadata["corpus_fingerprint"] != fingerprint.hexdigest():
+            raise RuntimeError(
+                "Processed papers do not match the model build fingerprint. "
+                "Rebuild artifacts with scripts/build_models.py."
+            )
     if len(papers) != index.matrix.shape[0]:
         raise RuntimeError(
             "Processed papers and TF-IDF index contain different numbers of rows. "

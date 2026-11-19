@@ -14,6 +14,8 @@ if __name__ == "__main__":
     parser.add_argument("--max-documents", type=int, default=1000,
                         help="Bounded sample size; use 0 only when intentionally loading the full split.")
     args = parser.parse_args()
+    if args.max_documents < 0:
+        parser.error("--max-documents must be 0 or a positive integer")
     papers = load_huggingface_dataset(SETTINGS.dataset_name, SETTINGS.split,
                                       max_documents=args.max_documents)
     print("Columns: paper_id, title, abstract")

@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import subprocess
+import sys
 from src.dataset_loader import clean_dataframe
 from src.preprocessing import preprocess_text, combine_title_abstract
 from src.tfidf_engine import TfidfIndex
@@ -8,6 +10,7 @@ from src.keyword_extraction import extract_keywords
 from src.topic_modeling import TopicModel
 from src.search_engine import SearchEngine
 from src.clustering import fit_clusters
+from src.dataset_loader import load_huggingface_dataset
 
 
 TITLES = ["Deep learning for images", "Natural language models", "Deep neural image networks", "Language classification"]
@@ -83,3 +86,28 @@ def test_optional_clustering():
     model, labels = fit_clusters(index.matrix, n_clusters=2)
     assert model.n_clusters == 2
     assert len(labels) == len(TITLES)
+
+
+def test_negative_limits_and_fractional_title_weight():
+    try:
+        load_huggingface_dataset(max_documents=-1)
+    except ValueError as exc:
+        assert "0 or a positive" in str(exc)
+    else:
+        raise AssertionError("Negative document limits must fail explicitly.")
+    try:
+        TfidfIndex.fit(TITLES, ABSTRACTS, title_weight=1.5)
+    except ValueError as exc:
+        assert "positive integer" in str(exc)
+    else:
+        raise AssertionError("Fractional title weights must fail explicitly.")
+
+
+def test_script_rejects_negative_document_limit():
+    result = subprocess.run(
+        [sys.executable, "scripts/build_models.py", "--max-documents", "-1"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "must be 0 or a positive integer" in result.stderr

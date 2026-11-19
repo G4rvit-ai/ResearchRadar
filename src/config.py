@@ -20,7 +20,7 @@ class Settings:
     lda_documents: int = int(os.getenv("RESEARCHRADAR_LDA_DOCUMENTS", "20000"))
     n_topics: int = int(os.getenv("RESEARCHRADAR_N_TOPICS", "10"))
     max_features: int = int(os.getenv("RESEARCHRADAR_MAX_FEATURES", "100000"))
-    title_weight: float = float(os.getenv("RESEARCHRADAR_TITLE_WEIGHT", "2.0"))
+    title_weight: int = int(os.getenv("RESEARCHRADAR_TITLE_WEIGHT", "2"))
     batch_size: int = 2048
 
 

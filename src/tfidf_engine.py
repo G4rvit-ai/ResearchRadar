@@ -14,6 +14,10 @@ class TfidfIndex:
 
     @classmethod
     def fit(cls, titles, abstracts, max_features=100000, title_weight=2):
+        if max_features < 1:
+            raise ValueError("max_features must be a positive integer.")
+        if isinstance(title_weight, bool) or not isinstance(title_weight, int) or title_weight < 1:
+            raise ValueError("title_weight must be a positive integer.")
         documents = [combine_title_abstract(title, abstract, title_weight) for title, abstract in zip(titles, abstracts)]
         if not documents:
             raise ValueError("At least one document is required to fit the TF-IDF index.")
