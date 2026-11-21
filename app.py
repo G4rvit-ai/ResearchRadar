@@ -27,6 +27,25 @@ def style_chart(figure):
     return figure
 
 
+def artifact_signature():
+    paths = [
+        PROCESSED_DIR / "papers.parquet",
+        MODELS_DIR / "tfidf" / "tfidf.npz",
+        MODELS_DIR / "tfidf" / "vectorizer.joblib",
+        MODELS_DIR / "lda" / "topic_model.joblib",
+        MODELS_DIR / "clustering.joblib",
+        ARTIFACTS_DIR / "metadata.json",
+    ]
+    signature = hashlib.sha256()
+    for path in paths:
+        if path.exists():
+            stat = path.stat()
+            signature.update(f"{path}:{stat.st_mtime_ns}:{stat.st_size}".encode("utf-8"))
+        else:
+            signature.update(f"{path}:missing".encode("utf-8"))
+    return signature.hexdigest()
+
+
 def inject_styles():
     st.markdown(
         """
@@ -213,15 +232,20 @@ def inject_styles():
 
 
 @st.cache_resource
-def load_engine():
+def load_engine(artifact_signature):
     papers_path = PROCESSED_DIR / "papers.parquet"
-    if not papers_path.exists() or not (MODELS_DIR / "tfidf" / "vectorizer.joblib").exists():
+    tfidf_matrix_path = MODELS_DIR / "tfidf" / "tfidf.npz"
+    tfidf_vectorizer_path = MODELS_DIR / "tfidf" / "vectorizer.joblib"
+    if not papers_path.exists() or not tfidf_matrix_path.exists() or not tfidf_vectorizer_path.exists():
         return None
     papers = pd.read_parquet(papers_path)
     index = TfidfIndex.load(MODELS_DIR / "tfidf")
     metadata_path = ARTIFACTS_DIR / "metadata.json"
     if metadata_path.exists():
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise RuntimeError("Build metadata is missing or corrupt. Rebuild artifacts with scripts/build_models.py.") from exc
         if metadata.get("paper_count") != len(papers):
             raise RuntimeError(
                 "Processed papers and build metadata contain different row counts. "
@@ -255,12 +279,15 @@ def load_engine():
 
 
 @st.cache_data
-def load_cluster_labels():
+def load_cluster_labels(artifact_signature):
     cluster_path = MODELS_DIR / "clustering.joblib"
     if not cluster_path.exists():
         return None
     import joblib
-    return joblib.load(cluster_path)["labels"]
+    try:
+        return joblib.load(cluster_path)["labels"]
+    except (OSError, EOFError, ValueError, KeyError):
+        return None
 
 
 def result_for_row(engine, row_index):
@@ -269,6 +296,16 @@ def result_for_row(engine, row_index):
         return engine.result_for_row(row_index)
     paper = engine.papers.iloc[row_index]
     return engine._result(row_index, paper, 0.0)
+
+
+def keyword_association_counts(results, keyword):
+    counts = {}
+    normalized_keyword = keyword.lower()
+    for result in results:
+        for term in result["keywords"]:
+            if normalized_keyword in term.lower():
+                counts[term] = counts.get(term, 0) + 1
+    return counts
 
 
 def render_result(result, engine):
@@ -302,7 +339,14 @@ def render_result(result, engine):
 def main():
     inject_styles()
     st.session_state.setdefault("saved_papers", set())
-    engine = load_engine()
+    try:
+        engine = load_engine(artifact_signature())
+    except (OSError, ValueError, RuntimeError, EOFError) as exc:
+        st.error("Model artifacts are unavailable or inconsistent.")
+        st.caption(str(exc))
+        st.code("python scripts/build_models.py --max-documents 10000 --lda-documents 5000 --topics 10 --max-features 40000 --assign-all-topics")
+        st.code("python scripts/build_clusters.py --clusters 10")
+        return
     if engine is None:
         st.warning("No local model artifacts found. Build them first with `python scripts/build_models.py --max-documents 5000`.")
         st.code("python -m pip install -r requirements.txt\npython scripts/build_models.py --max-documents 5000\nstreamlit run app.py")
@@ -451,10 +495,11 @@ def main():
             results = engine.search(keyword, 10)
             st.write(f"Top papers associated with **{keyword}**")
             if results:
+                association_counts = keyword_association_counts(results, keyword)
                 term_frame = pd.DataFrame(
-                    [(term, score) for result in results for term in result["keywords"] if keyword.lower() in term.lower()],
+                    [(term, count) for term, count in association_counts.items()],
                     columns=["term", "papers"],
-                ).groupby("term", as_index=False).size().rename(columns={"size": "papers"})
+                )
                 if not term_frame.empty:
                     st.plotly_chart(style_chart(px.bar(term_frame.sort_values("papers"),
                                                        x="papers", y="term", orientation="h",
@@ -477,7 +522,7 @@ def main():
                                            x="document_count", y="term", orientation="h",
                                            title="Most frequent meaningful terms")),
                         use_container_width=True)
-        labels = load_cluster_labels()
+        labels = load_cluster_labels(artifact_signature())
         if labels is not None and len(labels) != len(papers):
             st.warning("Clustering artifact is stale. Rebuild it with `python scripts/build_clusters.py`.")
             labels = None
